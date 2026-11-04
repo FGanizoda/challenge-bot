@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Telegram.Bot;
+using Telegram.Bot.Exceptions;
 using Telegram.Bot.Polling;
 using Telegram.Bot.Types.Enums;
 
@@ -41,21 +42,44 @@ public class BotService : BackgroundService
 
         var bot = new TelegramBotClient(token);
 
-        try
+        // После перезагрузки компьютера интернет может появиться не сразу, поэтому пробуем снова и снова.
+        // Останавливаемся только если Telegram прямо ответил, что токен неверный.
+        while (!stoppingToken.IsCancellationRequested)
         {
-            var me = await bot.GetMe(stoppingToken);
-            _handler.BotUsername = me.Username ?? "";
-            _holder.Set(bot); // теперь планировщик может писать в группу
-            _log.LogInformation("Бот запущен: @{Username}", me.Username);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            _log.LogError("Не удалось подключиться к Telegram (проверь токен и интернет): {Reason}", ex.Message);
-            _lifetime.StopApplication();
-            return;
+            try
+            {
+                var me = await bot.GetMe(stoppingToken);
+                _handler.BotUsername = me.Username ?? "";
+                _holder.Set(bot); // теперь планировщик может писать в группу
+                _log.LogInformation("Бот запущен: @{Username}", me.Username);
+                break;
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+            catch (ApiRequestException ex) when (ex.ErrorCode == 401)
+            {
+                _log.LogError("Telegram не принял токен (401). Проверь BOT_TOKEN или appsettings.Local.json.");
+                _lifetime.StopApplication();
+                return;
+            }
+            catch (Exception ex)
+            {
+                _log.LogWarning("Пока не удалось подключиться к Telegram, повторю через 30 секунд: {Reason}", ex.Message);
+                try
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
+            }
         }
 
         // Слушаем только сообщения. Накопившиеся за время простоя обновления придут при старте.
+        // При обрывах связи библиотека сама переподключается.
         var receiverOptions = new ReceiverOptions { AllowedUpdates = [UpdateType.Message] };
         await bot.ReceiveAsync(_handler, receiverOptions, stoppingToken);
     }
