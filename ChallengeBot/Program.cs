@@ -1,5 +1,6 @@
 using ChallengeBot.Config;
 using ChallengeBot.Data;
+using ChallengeBot.Handlers;
 using ChallengeBot.Logic;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -26,6 +27,12 @@ builder.Services.AddSingleton(sp => new ChallengeClock(
 // База данных: один файл challenge.db.
 builder.Services.AddDbContextFactory<ChallengeDbContext>(o =>
     o.UseSqlite(builder.Configuration.GetConnectionString("Challenge")));
+
+builder.Services.AddSingleton<ChallengeStore>();
+builder.Services.AddSingleton<ReportHandler>();
+builder.Services.AddSingleton<CommandHandler>();
+builder.Services.AddSingleton<BotUpdateHandler>();
+builder.Services.AddHostedService<BotService>();
 
 var host = builder.Build();
 
