@@ -1,4 +1,7 @@
 using ChallengeBot.Config;
+using ChallengeBot.Data;
+using ChallengeBot.Logic;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -15,7 +18,20 @@ builder.Services.Configure<ChallengeOptions>(
 // Подменяемые часы: в тестах и в режиме симуляции сюда подставят свои.
 builder.Services.AddSingleton(TimeProvider.System);
 
+// Часы челленджа: местное время с учётом часового пояса.
+builder.Services.AddSingleton(sp => new ChallengeClock(
+    sp.GetRequiredService<TimeProvider>(),
+    sp.GetRequiredService<IOptions<ChallengeOptions>>().Value.TimeZone));
+
+// База данных: один файл challenge.db.
+builder.Services.AddDbContextFactory<ChallengeDbContext>(o =>
+    o.UseSqlite(builder.Configuration.GetConnectionString("Challenge")));
+
 var host = builder.Build();
+
+// Схему создаём без миграций.
+using (var db = host.Services.GetRequiredService<IDbContextFactory<ChallengeDbContext>>().CreateDbContext())
+    db.Database.EnsureCreated();
 
 // Токен: переменная окружения BOT_TOKEN или BotToken из appsettings.Local.json.
 // Само значение нигде не печатаем.
