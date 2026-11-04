@@ -3,11 +3,16 @@ using ChallengeBot.Data;
 using ChallengeBot.Handlers;
 using ChallengeBot.Jobs;
 using ChallengeBot.Logic;
+using ChallengeBot.Simulation;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
+
+// Режим проверки: dotnet run -- --simulate. Бот в Telegram не подключается, база в памяти.
+if (args.Contains("--simulate"))
+    return await SimulationRunner.RunAsync();
 
 var builder = Host.CreateApplicationBuilder(args);
 
@@ -54,3 +59,4 @@ Console.WriteLine($"ChallengeBot: старт {options.StartDate}, дней {opti
 Console.WriteLine(string.IsNullOrWhiteSpace(token) ? "Токен не задан." : "Токен найден.");
 
 await host.RunAsync();
+return 0;
