@@ -52,6 +52,44 @@ public static class PairRotation
         return map;
     }
 
+    /// <summary>
+    /// Новичок встаёт в уже существующую цепочку: после первого участника.
+    /// Пара (a, b) превращается в тройку a → новичок → b → a, остальные пары не трогаем.
+    /// </summary>
+    public static void AddNewcomer(Dictionary<long, long> partnerMap, long newcomerId)
+    {
+        if (partnerMap.Count == 0)
+            return;
+
+        var anchor = partnerMap.Keys.First();
+        partnerMap[newcomerId] = partnerMap[anchor];
+        partnerMap[anchor] = newcomerId;
+    }
+
+    /// <summary>Восстанавливает группы из карты «кто кого отмечает» (идём по цепочкам).</summary>
+    public static List<PairGroup> GroupsFromPartnerMap(IReadOnlyDictionary<long, long> partnerMap)
+    {
+        var groups = new List<PairGroup>();
+        var seen = new HashSet<long>();
+
+        foreach (var start in partnerMap.Keys)
+        {
+            if (seen.Contains(start))
+                continue;
+
+            var members = new List<long>();
+            var current = start;
+            while (seen.Add(current))
+            {
+                members.Add(current);
+                if (!partnerMap.TryGetValue(current, out current))
+                    break;
+            }
+            groups.Add(new PairGroup(members));
+        }
+        return groups;
+    }
+
     // Первый остаётся, остальные сдвигаются по кругу.
     private static List<long> Shift(IReadOnlyList<long> ids, int rotationIndex)
     {

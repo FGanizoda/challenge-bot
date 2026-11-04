@@ -91,6 +91,21 @@ public class ChallengeStore
         return await db.Days.AsNoTracking().Where(d => d.UserId == userId).OrderBy(d => d.Date).ToListAsync();
     }
 
+    public async Task<List<DayRecord>> GetAllDaysAsync()
+    {
+        await using var db = await _factory.CreateDbContextAsync();
+        return await db.Days.AsNoTracking().ToListAsync();
+    }
+
+    /// <summary>Записывает напарников: у кого нет пары в карте, у того напарник очищается.</summary>
+    public async Task SetPartnersAsync(IReadOnlyDictionary<long, long> partnerMap)
+    {
+        await using var db = await _factory.CreateDbContextAsync();
+        foreach (var p in await db.Participants.Where(p => p.Active).ToListAsync())
+            p.PartnerUserId = partnerMap.TryGetValue(p.UserId, out var partner) ? partner : null;
+        await db.SaveChangesAsync();
+    }
+
     /// <summary>Добавляет запись за день. Возвращает false, если запись за этот день уже есть.</summary>
     public async Task<bool> TryAddDayAsync(DayRecord record)
     {

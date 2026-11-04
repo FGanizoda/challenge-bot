@@ -1,3 +1,4 @@
+using ChallengeBot.Jobs;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -12,14 +13,16 @@ public class BotService : BackgroundService
 {
     private readonly IConfiguration _config;
     private readonly BotUpdateHandler _handler;
+    private readonly BotClientHolder _holder;
     private readonly IHostApplicationLifetime _lifetime;
     private readonly ILogger<BotService> _log;
 
-    public BotService(IConfiguration config, BotUpdateHandler handler,
+    public BotService(IConfiguration config, BotUpdateHandler handler, BotClientHolder holder,
         IHostApplicationLifetime lifetime, ILogger<BotService> log)
     {
         _config = config;
         _handler = handler;
+        _holder = holder;
         _lifetime = lifetime;
         _log = log;
     }
@@ -42,6 +45,7 @@ public class BotService : BackgroundService
         {
             var me = await bot.GetMe(stoppingToken);
             _handler.BotUsername = me.Username ?? "";
+            _holder.Set(bot); // теперь планировщик может писать в группу
             _log.LogInformation("Бот запущен: @{Username}", me.Username);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)

@@ -13,6 +13,19 @@ public static class StartDatePlanner
         return NextMondayOnOrAfter(from);
     }
 
+    /// <summary>
+    /// То же, но если сегодня понедельник и дедлайн уже прошёл, день 1 сразу стал бы пропуском.
+    /// Поэтому в этом случае старт переносится на следующий понедельник.
+    /// </summary>
+    public static DateOnly PlanStart(DateTime nowLocal, DateOnly challengeStart, TimeOnly deadline)
+    {
+        var today = DateOnly.FromDateTime(nowLocal);
+        var start = PlanStart(today, challengeStart);
+        if (start == today && TimeOnly.FromDateTime(nowLocal) >= deadline)
+            start = start.AddDays(7);
+        return start;
+    }
+
     public static DateOnly NextMondayOnOrAfter(DateOnly date)
     {
         // DayOfWeek: Sunday = 0, Monday = 1 ... Saturday = 6

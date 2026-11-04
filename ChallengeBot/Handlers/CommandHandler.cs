@@ -123,7 +123,7 @@ public class CommandHandler
 
         // Новички стартуют в понедельник: если сегодня другой день, ждём ближайший понедельник.
         var today = _clock.Today;
-        var start = StartDatePlanner.PlanStart(today, _options.StartDate);
+        var start = StartDatePlanner.PlanStart(_clock.Now, _options.StartDate, _options.Deadline);
 
         await _store.SaveParticipantAsync(new Participant
         {

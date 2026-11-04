@@ -1,6 +1,7 @@
 using ChallengeBot.Config;
 using ChallengeBot.Data;
 using ChallengeBot.Handlers;
+using ChallengeBot.Jobs;
 using ChallengeBot.Logic;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -32,7 +33,11 @@ builder.Services.AddSingleton<ChallengeStore>();
 builder.Services.AddSingleton<ReportHandler>();
 builder.Services.AddSingleton<CommandHandler>();
 builder.Services.AddSingleton<BotUpdateHandler>();
+builder.Services.AddSingleton<BotClientHolder>();
+builder.Services.AddSingleton<IChatSender, TelegramChatSender>();
+builder.Services.AddSingleton<ChallengeJobs>();
 builder.Services.AddHostedService<BotService>();
+builder.Services.AddHostedService<SchedulerService>();
 
 var host = builder.Build();
 
