@@ -22,7 +22,22 @@ if (args.Contains("--simulate"))
 // Как служба Windows программа стартует в папке System32. Переходим в папку программы,
 // чтобы appsettings.json, challenge.db, logs/ и backups/ искались рядом с ChallengeBot.exe.
 if (WindowsServiceHelpers.IsWindowsService())
+{
     Directory.SetCurrentDirectory(AppContext.BaseDirectory);
+}
+else if (!File.Exists("appsettings.json"))
+{
+    // Запуск из разработки не из папки проекта (например, dotnet run --project ChallengeBot из корня решения):
+    // ищем папку с ChallengeBot.csproj выше bin/Debug/... и работаем в ней.
+    for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir != null; dir = dir.Parent)
+    {
+        if (File.Exists(Path.Combine(dir.FullName, "ChallengeBot.csproj")))
+        {
+            Directory.SetCurrentDirectory(dir.FullName);
+            break;
+        }
+    }
+}
 
 var builder = Host.CreateApplicationBuilder(args);
 
