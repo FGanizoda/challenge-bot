@@ -15,12 +15,15 @@ public class CommandHandler
     private readonly ChallengeStore _store;
     private readonly ChallengeClock _clock;
     private readonly ChallengeOptions _options;
+    private readonly AdminCommandHandler _admin;
 
-    public CommandHandler(ChallengeStore store, ChallengeClock clock, IOptions<ChallengeOptions> options)
+    public CommandHandler(ChallengeStore store, ChallengeClock clock, IOptions<ChallengeOptions> options,
+        AdminCommandHandler admin)
     {
         _store = store;
         _clock = clock;
         _options = options.Value;
+        _admin = admin;
     }
 
     /// <summary>
@@ -73,7 +76,120 @@ public class CommandHandler
             case "status":
                 await StatusAsync(bot, message, ct);
                 break;
+            case "sick":
+                await SickAsync(bot, message, ct);
+                break;
+            case "table":
+                await TableAsync(bot, message, ct);
+                break;
+            case "bank":
+                await BankAsync(bot, message, ct);
+                break;
+            default:
+                // /pair, /mark, /setstart, /export
+                await _admin.TryHandleAsync(bot, message, command, args, ct);
+                break;
         }
+    }
+
+    // ---------- /sick ----------
+
+    private async Task SickAsync(ITelegramBotClient bot, Message message, CancellationToken ct)
+    {
+        var user = message.From;
+        if (user is null)
+            return;
+
+        var participant = await _store.GetParticipantAsync(user.Id);
+        if (participant is null || !participant.Active)
+        {
+            await BotHelpers.ReplyAsync(bot, message, Messages.NotRegistered, ct);
+            return;
+        }
+
+        var today = _clock.Today;
+        var dayNumber = DayCalculator.GetDayNumber(participant.StartDate, today);
+        if (!DayCalculator.IsInRange(dayNumber, _options.Days))
+        {
+            await BotHelpers.ReplyAsync(bot, message, Messages.SickNotToday(participant.StartDate, dayNumber, _options.Days), ct);
+            return;
+        }
+
+        var existing = await _store.GetDayAsync(user.Id, today);
+        if (existing is not null)
+        {
+            await BotHelpers.ReplyAsync(bot, message, Messages.SickAlreadyHasRecord(existing.Status), ct);
+            return;
+        }
+
+        var days = await _store.GetDaysAsync(user.Id);
+        var used = days.Count(d => d.Status == DayStatus.Sick);
+
+        if (!SickPolicy.CanTake(_options.SickLimit, used))
+        {
+            // Лимит исчерпан: ничего не штрафуем автоматически. Ставим отметку, чтобы дедлайн не записал пропуск,
+            // а решение осталось за группой и админом (/mark).
+            await _store.SetSettingAsync(ChallengeStore.SickOverLimitKey(user.Id, today), "1");
+            await _store.LogAsync("sick_over_limit", $"user={user.Id} date={today:yyyy-MM-dd}");
+            await BotHelpers.ReplyAsync(bot, message, Messages.SickLimitReached(_options.SickLimit), ct);
+            return;
+        }
+
+        var added = await _store.TryAddDayAsync(new DayRecord
+        {
+            UserId = user.Id,
+            Date = today,
+            Status = DayStatus.Sick,
+            CreatedAt = DateTime.UtcNow
+        });
+        if (!added)
+        {
+            await BotHelpers.ReplyAsync(bot, message, Messages.SickAlreadyHasRecord(DayStatus.Sick), ct);
+            return;
+        }
+
+        await _store.LogAsync("sick", $"user={user.Id} date={today:yyyy-MM-dd}");
+        await BotHelpers.ReplyAsync(bot, message,
+            Messages.SickTaken(SickPolicy.Remaining(_options.SickLimit, used + 1), _options.SickLimit), ct);
+    }
+
+    // ---------- /table ----------
+
+    private async Task TableAsync(ITelegramBotClient bot, Message message, CancellationToken ct)
+    {
+        var participants = await _store.GetActiveParticipantsAsync();
+        if (participants.Count == 0)
+        {
+            await BotHelpers.ReplyAsync(bot, message, Messages.NoParticipants, ct);
+            return;
+        }
+
+        var allDays = await _store.GetAllDaysAsync();
+        var rows = participants.Select(p => new TableRow(
+            p.DisplayName,
+            p.StartDate,
+            allDays.Where(d => d.UserId == p.UserId).ToDictionary(d => d.Date, d => d.Status))).ToList();
+
+        await BotHelpers.ReplyHtmlAsync(bot, message, TableFormatter.Build(rows, _clock.Today, _options.Days), ct);
+    }
+
+    // ---------- /bank ----------
+
+    private async Task BankAsync(ITelegramBotClient bot, Message message, CancellationToken ct)
+    {
+        var participants = await _store.GetActiveParticipantsAsync();
+        if (participants.Count == 0)
+        {
+            await BotHelpers.ReplyAsync(bot, message, Messages.NoParticipants, ct);
+            return;
+        }
+
+        var allDays = await _store.GetAllDaysAsync();
+        var fines = participants
+            .Select(p => (p.DisplayName, allDays.Count(d => d.UserId == p.UserId && d.Status == DayStatus.Miss)))
+            .ToList();
+
+        await BotHelpers.ReplyAsync(bot, message, Messages.Bank(participants.Count, fines, _options), ct);
     }
 
     // ---------- /setup ----------
@@ -87,7 +203,7 @@ public class CommandHandler
             return;
         }
 
-        if (message.From is null || !await IsAdminAsync(bot, message.Chat.Id, message.From.Id, ct))
+        if (message.From is null || !await _admin.IsAdminAsync(bot, message.Chat.Id, message.From.Id, ct))
         {
             await BotHelpers.ReplyAsync(bot, message, Messages.AdminOnly, ct);
             return;
@@ -159,20 +275,5 @@ public class CommandHandler
         var dayNumber = DayCalculator.GetDayNumber(participant.StartDate, _clock.Today);
 
         await BotHelpers.ReplyAsync(bot, message, Messages.Status(participant, dayNumber, _options.Days, stats, _options), ct);
-    }
-
-    // ---------- Админы ----------
-
-    /// <summary>
-    /// Админ: если в настройках задан ADMIN_IDS, то только они;
-    /// если список пуст, то админы (и создатель) группы.
-    /// </summary>
-    public async Task<bool> IsAdminAsync(ITelegramBotClient bot, long chatId, long userId, CancellationToken ct)
-    {
-        if (_options.AdminIds.Count > 0)
-            return _options.AdminIds.Contains(userId);
-
-        var member = await bot.GetChatMember(chatId, userId, ct);
-        return member.Status is ChatMemberStatus.Administrator or ChatMemberStatus.Creator;
     }
 }

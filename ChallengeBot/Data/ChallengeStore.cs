@@ -11,6 +11,10 @@ public class ChallengeStore
     public const string ChatIdKey = "chat_id";
     public const string ReportsThreadIdKey = "reports_thread_id";
 
+    /// <summary>Отметка «просил больничный сверх лимита»: в такой день дедлайн пропуск не ставит.</summary>
+    public static string SickOverLimitKey(long userId, DateOnly date) =>
+        $"sick_over_limit:{userId}:{date:yyyy-MM-dd}";
+
     private readonly IDbContextFactory<ChallengeDbContext> _factory;
 
     public ChallengeStore(IDbContextFactory<ChallengeDbContext> factory) => _factory = factory;
@@ -56,6 +60,37 @@ public class ChallengeStore
     {
         await using var db = await _factory.CreateDbContextAsync();
         return await db.Participants.AsNoTracking().Where(p => p.Active).OrderBy(p => p.JoinedAt).ToListAsync();
+    }
+
+    public async Task<List<Participant>> GetAllParticipantsAsync()
+    {
+        await using var db = await _factory.CreateDbContextAsync();
+        return await db.Participants.AsNoTracking().OrderBy(p => p.JoinedAt).ToListAsync();
+    }
+
+    /// <summary>
+    /// Находит участника по «@username» или по числовому Telegram id (для людей без username).
+    /// Среди активных участников. Регистр в username не важен.
+    /// </summary>
+    public async Task<Participant?> FindParticipantAsync(string reference)
+    {
+        var text = reference.Trim().TrimStart('@');
+        if (text.Length == 0)
+            return null;
+
+        var active = await GetActiveParticipantsAsync();
+        if (long.TryParse(text, out var id))
+            return active.FirstOrDefault(p => p.UserId == id);
+        return active.FirstOrDefault(p => string.Equals(p.Username, text, StringComparison.OrdinalIgnoreCase));
+    }
+
+    public async Task SetStartDateAsync(long userId, DateOnly startDate)
+    {
+        await using var db = await _factory.CreateDbContextAsync();
+        var p = await db.Participants.FindAsync(userId);
+        if (p is null) return;
+        p.StartDate = startDate;
+        await db.SaveChangesAsync();
     }
 
     /// <summary>Добавляет участника или обновляет имя и дату старта у существующего.</summary>
@@ -116,6 +151,23 @@ public class ChallengeStore
         db.Days.Add(record);
         await db.SaveChangesAsync();
         return true;
+    }
+
+    /// <summary>Создаёт или перезаписывает запись за день (для /mark).</summary>
+    public async Task UpsertDayAsync(DayRecord record)
+    {
+        await using var db = await _factory.CreateDbContextAsync();
+        var existing = await db.Days.FindAsync(record.UserId, record.Date);
+        if (existing is null)
+        {
+            db.Days.Add(record);
+        }
+        else
+        {
+            existing.Status = record.Status;
+            existing.Wellbeing = record.Wellbeing ?? existing.Wellbeing;
+        }
+        await db.SaveChangesAsync();
     }
 
     // ---------- Журнал ----------

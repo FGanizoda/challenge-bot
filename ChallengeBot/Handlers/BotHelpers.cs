@@ -1,5 +1,6 @@
 using Telegram.Bot;
 using Telegram.Bot.Types;
+using Telegram.Bot.Types.Enums;
 
 namespace ChallengeBot.Handlers;
 
@@ -20,6 +21,11 @@ public static class BotHelpers
     /// <summary>Ответ в тот же чат и ту же тему.</summary>
     public static Task<Message> ReplyAsync(ITelegramBotClient bot, Message message, string text, CancellationToken ct) =>
         bot.SendMessage(message.Chat.Id, text, messageThreadId: ThreadIdOf(message), cancellationToken: ct);
+
+    /// <summary>Ответ в формате HTML (текст должен быть уже экранирован).</summary>
+    public static Task<Message> ReplyHtmlAsync(ITelegramBotClient bot, Message message, string html, CancellationToken ct) =>
+        bot.SendMessage(message.Chat.Id, html, parseMode: ParseMode.Html,
+            messageThreadId: ThreadIdOf(message), cancellationToken: ct);
 
     /// <summary>Имя для показа: «Имя Фамилия», если нет, то @username, если нет, то id.</summary>
     public static string DisplayNameOf(User user)

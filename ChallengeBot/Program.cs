@@ -31,6 +31,7 @@ builder.Services.AddDbContextFactory<ChallengeDbContext>(o =>
 
 builder.Services.AddSingleton<ChallengeStore>();
 builder.Services.AddSingleton<ReportHandler>();
+builder.Services.AddSingleton<AdminCommandHandler>();
 builder.Services.AddSingleton<CommandHandler>();
 builder.Services.AddSingleton<BotUpdateHandler>();
 builder.Services.AddSingleton<BotClientHolder>();

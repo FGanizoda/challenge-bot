@@ -173,6 +173,10 @@ public class ChallengeJobs
                 if (existing.Contains(date))
                     continue;
 
+                // Просил больничный сверх лимита: штраф не ставим, решает группа и админ (/mark).
+                if (await _store.GetSettingAsync(ChallengeStore.SickOverLimitKey(p.UserId, date)) is not null)
+                    continue;
+
                 var added = await _store.TryAddDayAsync(new DayRecord
                 {
                     UserId = p.UserId,
