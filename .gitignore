@@ -1,0 +1,16 @@
+# Секреты и данные — никогда в git
+appsettings.Local.json
+*.db
+*.db-shm
+*.db-wal
+backups/
+logs/
+.env
+
+# Сборка
+bin/
+obj/
+publish/
+.vs/
+*.user
+TestResults/
