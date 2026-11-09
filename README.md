@@ -246,3 +246,5 @@ deploy/                  скрипты установки службы Windows
 
 Токен бота, `appsettings.Local.json`, `challenge.db`, `backups\` и `logs\` указаны в `.gitignore` и не попадают в git.
 Не присылайте токен в чат (и мне, и в группу) и не публикуйте его на скриншотах.
+#   c h a l l e n g e - b o t  
+ 
